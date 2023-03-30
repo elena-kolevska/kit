@@ -56,6 +56,11 @@ BINARY_EXT_LOCAL:=
 GOLANGCI_LINT:=golangci-lint
 endif
 
+PROTOC_GEN_GO_VERSION = v1.28.1
+PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
+
+PROTOC_GEN_GO_GRPC_VERSION = 1.2.0  
+
 ################################################################################
 # Target: test                                                                 #
 ################################################################################
@@ -84,3 +89,53 @@ go.mod:
 .PHONY: check-diff
 check-diff:
 	git diff --exit-code ./go.mod # check no changes
+
+################################################################################
+# Target: init-proto                                                            #
+################################################################################
+.PHONY: init-proto
+init-proto:
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v$(PROTOC_GEN_GO_GRPC_VERSION)
+
+################################################################################
+# Target: gen-proto                                                            #
+################################################################################
+GRPC_PROTOS:=customerrors
+PROTO_PREFIX:=./pkg
+
+# Generate archive files for each binary
+# $(1): the binary name to be archived
+define genProtoc
+.PHONY: gen-proto-$(1)
+gen-proto-$(1):
+	$(PROTOC) protoc --go_out=./pkg  --go-grpc_out=. --go-grpc_opt=require_unimplemented_servers=false,module=$(PROTO_PREFIX) ./proto/$(1)/v1/*.proto
+endef
+
+$(foreach ITEM,$(GRPC_PROTOS),$(eval $(call genProtoc,$(ITEM))))
+
+GEN_PROTOS:=$(foreach ITEM,$(GRPC_PROTOS),gen-proto-$(ITEM))
+
+.PHONY: gen-proto
+gen-proto: check-proto-version $(GEN_PROTOS) modtidy
+
+################################################################################
+# Target: check-proto-version                                                         #
+################################################################################
+.PHONY: check-proto-version
+check-proto-version: ## Checking the version of proto related tools
+	echo "checking...done";
+
+################################################################################
+# Target: check-proto-diff                                                           #
+################################################################################
+.PHONY: check-proto-diff
+check-proto-diff:
+	git diff --exit-code ./pkg/proto/customerrors/v1/customerrors.pb.go # check no changes
+
+################################################################################
+# Target: modtidy                                                              #
+################################################################################
+.PHONY: modtidy
+modtidy:
+	go mod tidy
