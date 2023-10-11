@@ -101,7 +101,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=customerrors
+GRPC_PROTOS:=custom_errors
 PROTO_PREFIX:=./pkg
 
 # Generate archive files for each binary
@@ -131,7 +131,7 @@ check-proto-version: ## Checking the version of proto related tools
 ################################################################################
 .PHONY: check-proto-diff
 check-proto-diff:
-	git diff --exit-code ./pkg/proto/customerrors/v1/customerrors.pb.go # check no changes
+	git diff --exit-code ./pkg/proto/custom_errors/v1/custom_errors.pb.go # check no changes
 
 ################################################################################
 # Target: modtidy                                                              #

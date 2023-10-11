@@ -1,7 +1,7 @@
 package status
 
 import (
-	customerrors "github.com/dapr/kit/pkg/proto/customerrors/v1"
+	customerrors "github.com/dapr/kit/pkg/proto/custom_errors/v1"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

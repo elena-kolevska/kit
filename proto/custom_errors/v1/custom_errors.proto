@@ -19,7 +19,7 @@ package kit.proto.customerrors.v1;
 option csharp_namespace = "Kit.Client.Autogen.Grpc.v1";
 option java_outer_classname = "CustomErrorsProtos";
 option java_package = "io.kit.v1";
-option go_package = "proto/customerrors/v1;customerrors";
+option go_package = "proto/custom_errors/v1;custom_errors";
 
 message DaprKitErrorInfo {
   // The reason of the error. This is a constant value that identifies the
