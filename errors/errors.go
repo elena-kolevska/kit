@@ -35,50 +35,58 @@ var log = logger.NewLogger("dapr.kit")
 type Error struct {
 	// Added error details. To see available details see:
 	// https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
-	Details []proto.Message
+	details []proto.Message
 
 	// Status code for gRPC responses.
-	GrpcCode grpcCodes.Code
+	grpcCode grpcCodes.Code
 
 	// Status code for HTTP responses.
-	HTTPCode int
+	httpCode int
 
 	// Message is the human-readable error message.
-	Message string
+	message string
 
 	// Tag is a string identifying the error, used with HTTP responses only.
-	Tag string
+	tag string
 }
 
-// New create a new Error using the supplied metadata and Options
-func New(grpcCode grpcCodes.Code, httpCode int, message string, tag string) *Error {
-	// Use default values
-	kitError := &Error{
-		Details:  make([]proto.Message, 0),
-		GrpcCode: grpcCode,
-		HTTPCode: httpCode,
-		Message:  message,
-		Tag:      tag,
-	}
+// HTTPStatusFromCode returns the HTTP status code for the given gRPC status code.
+func (e *Error) HttpStatusCode() int {
+	return e.httpCode
+}
 
-	return kitError
+func (e *Error) GrpcStatusCode() grpcCodes.Code {
+	return e.grpcCode
 }
 
 // Error implements the error interface.
-func (e *Error) Error() string {
-	if e != nil {
-		return e.String()
-	}
-	return ""
+func (e Error) Error() string {
+	return e.String()
 }
 
 // String returns the string representation.
 func (e Error) String() string {
-	return fmt.Sprintf(errStringFormat, e.GrpcCode.String(), e.Message)
+	return fmt.Sprintf(errStringFormat, e.grpcCode.String(), e.message)
+}
+
+type ErrorBuilder struct {
+	err Error
+}
+
+func NewBuilder(grpcCode grpcCodes.Code, httpCode int, message string, tag string) *ErrorBuilder {
+	return &ErrorBuilder{
+		err: Error{
+			details:  make([]proto.Message, 0),
+			grpcCode: grpcCode,
+			httpCode: httpCode,
+			message:  message,
+			tag:      tag,
+		},
+	}
 }
 
 // WithResourceInfo used to pass ResourceInfo to the Error struct.
-func (e *Error) WithResourceInfo(resourceType string, resourceName string, owner string, description string) *Error {
+func (b *ErrorBuilder) WithResourceInfo(resourceType string, resourceName string, owner string, description string) *ErrorBuilder {
 	resourceInfo := &errdetails.ResourceInfo{
 		ResourceType: resourceType,
 		ResourceName: resourceName,
@@ -86,12 +94,12 @@ func (e *Error) WithResourceInfo(resourceType string, resourceName string, owner
 		Description:  description,
 	}
 
-	e.Details = append(e.Details, resourceInfo)
+	b.err.details = append(b.err.details, resourceInfo)
 
-	return e
+	return b
 }
 
-func (e *Error) WithHelpLink(url string, description string) *Error {
+func (b *ErrorBuilder) WithHelpLink(url string, description string) *ErrorBuilder {
 	link := errdetails.Help_Link{
 		Description: description,
 		Url:         url,
@@ -100,31 +108,31 @@ func (e *Error) WithHelpLink(url string, description string) *Error {
 	links = append(links, &link)
 
 	help := &errdetails.Help{Links: links}
-	e.Details = append(e.Details, help)
+	b.err.details = append(b.err.details, help)
 
-	return e
+	return b
 }
 
-func (e *Error) WithHelp(links []*errdetails.Help_Link) *Error {
-	e.Details = append(e.Details, &errdetails.Help{Links: links})
+func (b *ErrorBuilder) WithHelp(links []*errdetails.Help_Link) *ErrorBuilder {
+	b.err.details = append(b.err.details, &errdetails.Help{Links: links})
 
-	return e
+	return b
 }
 
 // WithErrorInfo adds error information to the Error struct.
-func (e *Error) WithErrorInfo(reason string, metadata map[string]string) *Error {
+func (b *ErrorBuilder) WithErrorInfo(reason string, metadata map[string]string) *ErrorBuilder {
 	errorInfo := &errdetails.ErrorInfo{
 		Domain:   ErrMsgDomain,
 		Reason:   reason,
 		Metadata: metadata,
 	}
-	e.Details = append(e.Details, errorInfo)
+	b.err.details = append(b.err.details, errorInfo)
 
-	return e
+	return b
 }
 
 // WithErrorInfo adds error information to the Error struct.
-func (e *Error) WithFieldViolation(fieldName string, msg string) *Error {
+func (b *ErrorBuilder) WithFieldViolation(fieldName string, msg string) *ErrorBuilder {
 	br := &errdetails.BadRequest{
 		FieldViolations: []*errdetails.BadRequest_FieldViolation{{
 			Field:       fieldName,
@@ -132,26 +140,30 @@ func (e *Error) WithFieldViolation(fieldName string, msg string) *Error {
 		}},
 	}
 
-	e.Details = append(e.Details, br)
+	b.err.details = append(b.err.details, br)
 
-	return e
+	return b
 }
 
-func (e *Error) WithDetails(details ...proto.Message) *Error {
-	e.Details = append(e.Details, details...)
+func (b *ErrorBuilder) WithDetails(details ...proto.Message) *ErrorBuilder {
+	b.err.details = append(b.err.details, details...)
 
-	return e
+	return b
+}
+
+func (b *ErrorBuilder) Build() error {
+	return b.err
 }
 
 // *** GRPC Methods ***
 
 // GRPCStatus returns the gRPC status.Status object.
 func (e *Error) GRPCStatus() *status.Status {
-	stat := status.New(e.GrpcCode, e.Message)
+	stat := status.New(e.grpcCode, e.message)
 
 	// convert details from proto.Msg -> protoiface.MsgV1
 	var convertedDetails []protoiface.MessageV1
-	for _, detail := range e.Details {
+	for _, detail := range e.details {
 		if v1, ok := detail.(protoiface.MessageV1); ok {
 			convertedDetails = append(convertedDetails, v1)
 		} else {
@@ -159,7 +171,7 @@ func (e *Error) GRPCStatus() *status.Status {
 		}
 	}
 
-	if len(e.Details) > 0 {
+	if len(e.details) > 0 {
 		var err error
 		stat, err = stat.WithDetails(convertedDetails...)
 		if err != nil {
@@ -348,7 +360,7 @@ func (e *Error) Is(targetI error) bool {
 	if !errors.As(targetI, &target) {
 		return false
 	}
-	return e.Tag == target.Tag &&
-		e.GrpcCode == target.GrpcCode &&
-		e.HTTPCode == target.HTTPCode
+	return e.tag == target.tag &&
+		e.grpcCode == target.grpcCode &&
+		e.httpCode == target.httpCode
 }
